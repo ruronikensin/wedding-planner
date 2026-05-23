@@ -296,7 +296,7 @@
 <div id="nav">
   <div class="nav-top">
     <div class="nav-brand" onclick="showPage('home')">💍 Wedding Planner</div>
-    <div style="font-size:13px;color:var(--gray)">Family Private</div>
+    <div style="font-size:13px;color:var(--gray);font-style:italic;letter-spacing:0.3px">✨ Our Private Space</div>
   </div>
   <div class="nav-tabs" id="navTabs"></div>
 </div>
@@ -341,14 +341,15 @@ const PAGES = [
   { id:'otherplans',   label:'Other Plans',    icon:'📝' },
   { id:'moodboard',    label:'Moodboard',      icon:'🎨' },
   { id:'bridecloth',   label:'Bride Outfits',  icon:'👗' },
-  { id:'mencloth',     label:'Groom Outfits',  icon:'🤵' },
+  { id:'mencloth',     label:'Groom Outfits',      icon:'🤵' },
+  { id:'cinematographer', label:'Cinematographer', icon:'🎬' },
 ];
 
 const CATEGORY_PAGES = PAGES.filter(p => !['home','budget','moodboard'].includes(p.id));
 const PAGE_COLORS = {
   venue:'#f0e8fa', event:'#fde8d8', photography:'#d8edf5',
   makeup:'#fde8f0', otherplans:'#f5f0d8', bridecloth:'#f5d8d8',
-  mencloth:'#d8d8f5'
+  mencloth:'#d8d8f5', cinematographer:'#d8f0e8'
 };
 
 function uid() { return Math.random().toString(36).slice(2,9); }
@@ -701,10 +702,12 @@ function deleteEntry(pid, eid) {
 function renderBudgetPage() {
   const el = document.getElementById('page_budget');
   const items = getData('budget_items');
-  const totalBudget = items.reduce((s,i)=>s+(Number(i.budgeted)||0),0);
-  const totalSpent  = items.reduce((s,i)=>s+(Number(i.spent)||0),0);
-  const remaining   = totalBudget - totalSpent;
-  const pct = totalBudget>0 ? Math.min(100,Math.round((totalSpent/totalBudget)*100)) : 0;
+  const budgetMeta = getData('budget_meta');
+  const mainBudget = budgetMeta.length > 0 ? Number(budgetMeta[0].main || 0) : 0;
+  const totalSpent = items.reduce((s,i) => s + (Number(i.spent)||0), 0);
+  const remaining  = mainBudget - totalSpent;
+  const pct = mainBudget > 0 ? Math.min(100, Math.round((totalSpent / mainBudget) * 100)) : 0;
+  const isOver = totalSpent > mainBudget && mainBudget > 0;
 
   el.innerHTML = `
     <div class="export-bar">
@@ -715,67 +718,156 @@ function renderBudgetPage() {
     </div>
     <div class="page-header" style="background:linear-gradient(135deg,#d8f5e8 0%,#fff 100%);border:1px solid rgba(100,180,140,0.2)">
       <div><h2>💰 Budget Tracker</h2><div class="meta">Track your wedding spending</div></div>
-      <button class="btn-primary" onclick="showBudgetForm()">+ Add Item</button>
+      <button class="btn-primary" onclick="showBudgetForm()">+ Add Sector</button>
     </div>
-    <div class="budget-stats">
-      <div class="stat-card"><div class="stat-label">Total Budget</div><div class="stat-value" style="color:#3a6e8a">৳${totalBudget.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">Total Spent</div><div class="stat-value" style="color:#c0392b">৳${totalSpent.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">Remaining</div><div class="stat-value" style="color:${remaining>=0?'#2a6e3a':'#c0392b'}">৳${remaining.toLocaleString()}</div></div>
+
+    <!-- MAIN BUDGET & REMAINING CARDS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+
+      <!-- Main Budget Card -->
+      <div class="stat-card" style="border:2px solid var(--plum-mid);position:relative">
+        <div class="stat-label">💼 Main Budget</div>
+        <div class="stat-value" style="color:var(--plum-mid);font-size:28px" id="main-budget-display">
+          ${mainBudget > 0 ? '৳' + mainBudget.toLocaleString() : '—'}
+        </div>
+        <button onclick="showMainBudgetEdit()" style="margin-top:12px;background:var(--plum-light);color:var(--plum-mid);border:none;border-radius:10px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:700;font-family:'Lato',sans-serif">
+          ✏️ ${mainBudget > 0 ? 'Edit' : 'Set Budget'}
+        </button>
+        <div id="main-budget-form"></div>
+      </div>
+
+      <!-- Remaining Card -->
+      <div class="stat-card" style="border:2px solid ${isOver ? '#e74c3c' : '#2a6e3a'}">
+        <div class="stat-label">${isOver ? '⚠️ Over Budget!' : '✅ Remaining'}</div>
+        <div class="stat-value" style="color:${isOver ? '#c0392b' : '#2a6e3a'};font-size:28px">
+          ${mainBudget > 0 ? '৳' + Math.abs(remaining).toLocaleString() + (isOver ? ' over' : '') : '—'}
+        </div>
+        <div style="margin-top:10px;font-size:13px;color:var(--gray)">
+          ${mainBudget > 0 ? `৳${totalSpent.toLocaleString()} spent of ৳${mainBudget.toLocaleString()}` : 'Set a main budget above'}
+        </div>
+      </div>
     </div>
-    ${totalBudget>0?`
+
+    <!-- PROGRESS BAR -->
+    ${mainBudget > 0 ? `
     <div class="progress-wrap">
-      <div class="progress-labels"><span>Budget used</span><span>${pct}%</span></div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${totalSpent>totalBudget?'#e74c3c':'var(--rose)'}"></div></div>
-    </div>`:''}
+      <div class="progress-labels">
+        <span>Budget used</span>
+        <span style="color:${isOver?'#c0392b':'var(--gray)'};font-weight:700">${pct}%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${pct}%;background:${isOver ? '#e74c3c' : 'var(--rose)'}"></div>
+      </div>
+    </div>` : ''}
+
+    <!-- SECTOR FORM & LIST -->
     <div id="budget_form"></div>
+
+    <h3 style="font-family:'Playfair Display',serif;font-size:19px;color:var(--plum);margin-bottom:16px">📂 Spending Sectors</h3>
     <div id="budget_list">
-      ${items.length===0
-        ?'<div class="empty"><div class="empty-icon">💰</div><p>No budget items yet.</p></div>'
-        :items.map(item=>{
-          const over = Number(item.spent)>Number(item.budgeted)&&item.budgeted;
-          return `<div class="budget-item${over?' over':''}">
-            <div style="flex:1;min-width:120px">
-              <div class="budget-cat">${item.category}</div>
-              ${item.note?`<div class="budget-note">${item.note}</div>`:''}
-            </div>
-            <div class="budget-num">Budget: <b>৳${Number(item.budgeted||0).toLocaleString()}</b></div>
-            <div class="budget-num" style="color:${over?'#c0392b':'#2a6e3a'}">Spent: <b>৳${Number(item.spent||0).toLocaleString()}</b></div>
-            ${over?'<span class="badge" style="background:#fde8e8;color:#c0392b">Over budget</span>':''}
-            <button class="btn-icon btn-delete" onclick="deleteBudgetItem('${item.id}')">🗑️</button>
-          </div>`;
-        }).join('')
+      ${items.length === 0
+        ? '<div class="empty"><div class="empty-icon">💸</div><p>No sectors yet. Add a sector like Venue, Catering, Photography etc.</p></div>'
+        : items.map(item => {
+            const spent = Number(item.spent) || 0;
+            const over = spent > 0 && mainBudget > 0;
+            const sectorPct = mainBudget > 0 ? Math.min(100, Math.round((spent / mainBudget) * 100)) : 0;
+            return `
+            <div class="budget-item" style="flex-direction:column;align-items:stretch;gap:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <div>
+                  <div class="budget-cat">${item.category}</div>
+                  ${item.note ? `<div class="budget-note">${item.note}</div>` : ''}
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:20px;font-weight:700;color:#c0392b">৳${spent.toLocaleString()}</div>
+                  <button class="btn-icon btn-edit" onclick="showEditSector('${item.id}')">✏️</button>
+                  <button class="btn-icon btn-delete" onclick="deleteBudgetItem('${item.id}')">🗑️</button>
+                </div>
+              </div>
+              ${mainBudget > 0 ? `
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray);margin-bottom:4px">
+                  <span>${sectorPct}% of total budget</span>
+                  <span>৳${spent.toLocaleString()} / ৳${mainBudget.toLocaleString()}</span>
+                </div>
+                <div class="progress-bar" style="height:8px">
+                  <div class="progress-fill" style="width:${sectorPct}%;background:var(--plum-mid)"></div>
+                </div>
+              </div>` : ''}
+            </div>`;
+          }).join('')
       }
     </div>`;
+}
+
+function showMainBudgetEdit() {
+  document.getElementById('main-budget-form').innerHTML = `
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <input type="number" id="mb_input" placeholder="e.g. 500000"
+        style="flex:1;padding:9px 13px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:'Lato',sans-serif;outline:none">
+      <button class="btn-primary" style="padding:9px 16px;font-size:13px" onclick="saveMainBudget()">Save</button>
+      <button class="btn-cancel" style="padding:9px 14px;font-size:13px" onclick="document.getElementById('main-budget-form').innerHTML=''">✕</button>
+    </div>`;
+  const existing = getData('budget_meta');
+  if (existing.length > 0) document.getElementById('mb_input').value = existing[0].main || '';
+  document.getElementById('mb_input').focus();
+}
+
+function saveMainBudget() {
+  const val = document.getElementById('mb_input').value.trim();
+  if (!val || isNaN(val)) { alert('Enter a valid amount.'); return; }
+  setData('budget_meta', [{ main: val }]);
 }
 
 function showBudgetForm() {
   document.getElementById('budget_form').innerHTML = `
     <div class="form-box">
       <div class="form-grid">
-        <div><label>Category</label><input type="text" id="bf_cat" placeholder="e.g. Venue"></div>
-        <div><label>Budgeted (৳)</label><input type="number" id="bf_budget" placeholder="0"></div>
-        <div><label>Spent (৳)</label><input type="number" id="bf_spent" placeholder="0"></div>
-        <div><label>Note (optional)</label><input type="text" id="bf_note" placeholder="Any note..."></div>
+        <div><label>Sector Name</label><input type="text" id="bf_cat" placeholder="e.g. Venue, Catering, Makeup..."></div>
+        <div><label>Amount Spent (৳)</label><input type="number" id="bf_spent" placeholder="0"></div>
+        <div class="form-full"><label>Note (optional)</label><input type="text" id="bf_note" placeholder="Any details..."></div>
       </div>
       <div class="btn-group">
-        <button class="btn-primary" onclick="saveBudgetItem()">💾 Save</button>
+        <button class="btn-primary" onclick="saveBudgetItem(null)">💾 Save Sector</button>
         <button class="btn-cancel" onclick="document.getElementById('budget_form').innerHTML=''">Cancel</button>
       </div>
     </div>`;
 }
-function saveBudgetItem() {
+
+function showEditSector(id) {
+  const item = getData('budget_items').find(i => i.id === id);
+  if (!item) return;
+  document.getElementById('budget_form').innerHTML = `
+    <div class="form-box">
+      <div class="form-grid">
+        <div><label>Sector Name</label><input type="text" id="bf_cat" value="${item.category}"></div>
+        <div><label>Amount Spent (৳)</label><input type="number" id="bf_spent" value="${item.spent||0}"></div>
+        <div class="form-full"><label>Note (optional)</label><input type="text" id="bf_note" value="${item.note||''}"></div>
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="saveBudgetItem('${id}')">💾 Update</button>
+        <button class="btn-cancel" onclick="document.getElementById('budget_form').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+  document.getElementById('budget_form').scrollIntoView({behavior:'smooth'});
+}
+
+function saveBudgetItem(editId) {
   const cat = document.getElementById('bf_cat').value.trim();
-  if (!cat) { alert('Enter a category.'); return; }
+  if (!cat) { alert('Enter a sector name.'); return; }
   const items = getData('budget_items');
-  items.push({ id:uid(), category:cat,
-    budgeted:document.getElementById('bf_budget').value,
-    spent:document.getElementById('bf_spent').value,
-    note:document.getElementById('bf_note').value });
+  if (editId) {
+    const idx = items.findIndex(i => i.id === editId);
+    if (idx >= 0) items[idx] = { ...items[idx], category: cat, spent: document.getElementById('bf_spent').value, note: document.getElementById('bf_note').value };
+  } else {
+    items.push({ id: uid(), category: cat, spent: document.getElementById('bf_spent').value, note: document.getElementById('bf_note').value });
+  }
   setData('budget_items', items);
 }
+
 function deleteBudgetItem(id) {
-  if (!confirm('Delete?')) return;
-  setData('budget_items', getData('budget_items').filter(i=>i.id!==id));
+  if (!confirm('Delete this sector?')) return;
+  setData('budget_items', getData('budget_items').filter(i => i.id !== id));
 }
 
 // ─── MOODBOARD PAGE ──────────────────────────────────────────────
@@ -879,6 +971,7 @@ function exportData() {
   const all = {};
   CATEGORY_PAGES.forEach(p => all[p.id] = getData(p.id));
   all.budget_items = getData('budget_items');
+  all.budget_meta = getData('budget_meta');
   all.moodboard = getData('moodboard');
   const blob = new Blob([JSON.stringify(all,null,2)],{type:'application/json'});
   const a = document.createElement('a');
